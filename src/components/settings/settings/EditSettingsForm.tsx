@@ -350,6 +350,7 @@ interface IProps extends WrappedComponentProps {
   showServicesUpdatedInfoBar: boolean;
   updateVersion: string;
   serverURL: string;
+  lastUpdateCheckTime: string;
   onClearAllCache: () => void;
   getCacheSize: () => void;
   checkForUpdates: () => void;
@@ -449,6 +450,7 @@ class EditSettingsForm extends Component<IProps, IState> {
       isTodosActivated,
       isOnline,
       serverURL,
+      lastUpdateCheckTime,
       intl,
     } = this.props;
 
@@ -1349,6 +1351,13 @@ class EditSettingsForm extends Component<IProps, IState> {
                     )}
                   </>
                 )}
+                <div>
+                  {lastUpdateCheckTime && (
+                    <p>
+                      Last checked: {new Date(lastUpdateCheckTime).toLocaleString()}
+                    </p>
+                  )}
+                </div>
                 <p className="settings__message">
                   <Icon icon={mdiGithub} /> Ferdium is based on{' '}
                   <a
