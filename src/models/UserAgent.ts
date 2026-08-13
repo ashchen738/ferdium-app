@@ -7,14 +7,9 @@ const debug = require('../preload-safe-debug')('Ferdium:UserAgent');
 
 export default class UserAgent {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _willNavigateListener = (_event: any): void => {};
-
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   _didNavigateListener = (_event: any): void => {};
 
-  @observable.ref webview: ElectronWebView = null;
-
-  @observable chromelessUserAgent: boolean = false;
+  @observable.ref webview: ElectronWebView | null = null;
 
   @observable userAgentPref: string | null = null;
 
@@ -70,40 +65,41 @@ export default class UserAgent {
   }
 
   @computed get userAgent(): string {
-    return (
-      this.serviceUserAgentPref ||
-      (this.chromelessUserAgent
-        ? this.userAgentWithoutChromeVersion
-        : this.defaultUserAgent)
-    );
+    return this.serviceUserAgentPref || this.defaultUserAgent;
   }
 
-  @action setWebviewReference(webview: ElectronWebView): void {
+  @action setWebviewReference(webview: ElectronWebView | null): void {
+    if (this.webview === webview) {
+      return;
+    }
+
     this.webview = webview;
   }
 
-  @action _handleNavigate(url: string, forwardingHack: boolean = false): void {
+  @action _handleNavigate(url: string): void {
     if (url.startsWith('https://accounts.google.com')) {
-      if (!this.chromelessUserAgent) {
-        debug('Setting user agent to chromeless for url', url);
-        this.chromelessUserAgent = true;
-        this.webview.userAgent = this.userAgent;
-        if (forwardingHack) {
-          this.webview.loadURL(url);
-        }
+      debug('Setting user agent to chromeless for url', url);
+      // Set chromeless user agent (without Chrome version) for Google accounts.
+      // Note: This is intentionally only called from did-navigate (after navigation
+      // completes), never from will-navigate or did-redirect-navigation. Setting
+      // webview.userAgent during a pending navigation or redirect chain causes
+      // Electron to cancel the navigation via SetUserAgentOverride(), which breaks
+      // cross-origin form POST requests (e.g. SAML ACS endpoints) and redirect chains.
+      if (this.webview) {
+        this.webview.userAgent =
+          this.serviceUserAgentPref || this.userAgentWithoutChromeVersion;
       }
-    } else if (this.chromelessUserAgent) {
-      debug('Setting user agent to contain chrome for url', url);
-      this.chromelessUserAgent = false;
-      this.webview.userAgent = this.userAgent;
+    } else {
+      debug('Setting user agent to default for url', url);
+      if (this.webview) {
+        this.webview.userAgent =
+          this.serviceUserAgentPref || this.defaultUserAgent;
+      }
     }
   }
 
   _addWebviewEvents(webview: ElectronWebView): void {
     debug('Adding event handlers');
-
-    this._willNavigateListener = event => this._handleNavigate(event.url, true);
-    webview.addEventListener('will-navigate', this._willNavigateListener);
 
     this._didNavigateListener = event => this._handleNavigate(event.url);
     webview.addEventListener('did-navigate', this._didNavigateListener);
@@ -112,7 +108,6 @@ export default class UserAgent {
   _removeWebviewEvents(webview: ElectronWebView): void {
     debug('Removing event handlers');
 
-    webview.removeEventListener('will-navigate', this._willNavigateListener);
     webview.removeEventListener('did-navigate', this._didNavigateListener);
   }
 }

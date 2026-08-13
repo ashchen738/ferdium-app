@@ -8,12 +8,7 @@
  */
 
 import { Menu, MenuItem } from '@electron/remote';
-import {
-  type WebContents,
-  clipboard,
-  ipcRenderer,
-  nativeImage,
-} from 'electron';
+import { type WebContents, ipcRenderer } from 'electron';
 import { cmdOrCtrlShortcutKey, isMac } from '../environment';
 
 import {
@@ -24,8 +19,61 @@ import {
   TRANSLATOR_ENGINE_GOOGLE,
   TRANSLATOR_ENGINE_LIBRETRANSLATE,
 } from '../config';
+import {
+  writeImageDataUrlToClipboard,
+  writeTextToClipboard,
+} from '../helpers/clipboard-helpers';
 import { openExternalUrl } from '../helpers/url-helpers';
 import type IContextMenuParams from '../models/IContextMenuParams';
+
+// Get translated text via IPC - currently unused but kept for future use
+// const getTranslatedText = async (
+//   key: string,
+//   params?: { [key: string]: string },
+// ): Promise<string> => {
+//   try {
+//     const result = await ipcRenderer.invoke('get-translation', key, params);
+//     return result || key;
+//   } catch {
+//     return key;
+//   }
+// };
+
+// Initialize translation cache
+let translationCache: { [key: string]: string } = {};
+
+// Request translation cache from main process
+const initializeTranslationCache = () => {
+  ipcRenderer.send('request-translation-cache');
+  ipcRenderer.once('translation-cache', (_event, translations) => {
+    translationCache = translations;
+    // Also store in localStorage for persistence
+    localStorage.setItem('ferdium-translations', JSON.stringify(translations));
+  });
+};
+
+// Initialize cache on load
+initializeTranslationCache();
+
+// Synchronous version for immediate use (with fallback)
+const getTranslatedTextSync = (key: string, fallback: string): string => {
+  try {
+    // First try the in-memory cache
+    if (translationCache[key]) {
+      return translationCache[key];
+    }
+
+    // Then try localStorage cache
+    const cachedTranslations = localStorage.getItem('ferdium-translations');
+    if (cachedTranslations) {
+      const translations = JSON.parse(cachedTranslations);
+      return translations[key] || fallback;
+    }
+    return fallback;
+  } catch {
+    return fallback;
+  }
+};
 
 const matchesWord = (string: string) => {
   const regex =
@@ -50,7 +98,10 @@ const translatePopup = (res, isError: boolean = false) => {
   }
 
   const style = document.createElement('style');
-  style.innerHTML = `
+  // textContent, not innerHTML: innerHTML is a Trusted Types sink, so sites
+  // sending `require-trusted-types-for 'script'` reject the assignment and the
+  // translator popup renders unstyled.
+  style.textContent = `
     .container-ferdium-translator {
       position: fixed;
       opacity: 0.9;
@@ -145,32 +196,59 @@ interface ContextMenuStringTable {
   inspectElement: () => string;
 }
 
-// TODO: Need to externalize for i18n
+// Internationalized context menu string table
 const contextMenuStringTable: ContextMenuStringTable = {
-  lookUpDefinition: ({ word }) => `Look Up "${word}"`,
-  cut: () => 'Cut',
-  copy: () => 'Copy',
-  paste: () => 'Paste',
-  pasteAndMatchStyle: () => 'Paste and match style',
-  searchWith: ({ searchEngine }) => `Search with ${searchEngine}`,
-  translate: () => 'Translate to ...',
+  lookUpDefinition: ({ word }) =>
+    getTranslatedTextSync(
+      'contextMenu.lookUpDefinition',
+      'Look Up "{word}"',
+    ).replace('{word}', word),
+  cut: () => getTranslatedTextSync('contextMenu.cut', 'Cut'),
+  copy: () => getTranslatedTextSync('contextMenu.copy', 'Copy'),
+  paste: () => getTranslatedTextSync('contextMenu.paste', 'Paste'),
+  pasteAndMatchStyle: () =>
+    getTranslatedTextSync(
+      'contextMenu.pasteAndMatchStyle',
+      'Paste and match style',
+    ),
+  searchWith: ({ searchEngine }) =>
+    `${getTranslatedTextSync(
+      'contextMenu.searchWith',
+      'Search with',
+    )} ${searchEngine}`,
+  translate: () =>
+    getTranslatedTextSync('contextMenu.translate', 'Translate to ...'),
   quickTranslate: ({ translatorLanguage }) =>
-    `Translate to ${translatorLanguage}`,
+    getTranslatedTextSync(
+      'contextMenu.quickTranslate',
+      'Translate to {translatorLanguage}',
+    ).replace('{translatorLanguage}', translatorLanguage),
   translateLanguage: ({ translatorLanguage }) => `${translatorLanguage}`,
-  openLinkUrl: () => 'Open Link',
-  openInBrowser: () => 'Open in Browser',
-  openInFerdium: () => 'Open in Ferdium',
-  copyLinkUrl: () => 'Copy Link',
-  copyImageUrl: () => 'Copy Image Address',
-  copyImage: () => 'Copy Image',
-  downloadImage: () => 'Download Image',
-  addToDictionary: () => 'Add to Dictionary',
-  goBack: () => 'Go Back',
-  goForward: () => 'Go Forward',
-  copyPageUrl: () => 'Copy Page URL',
-  goToHomePage: () => 'Go to Home Page',
-  copyMail: () => 'Copy Email Address',
-  inspectElement: () => 'Inspect Element',
+  openLinkUrl: () =>
+    getTranslatedTextSync('contextMenu.openLinkUrl', 'Open Link'),
+  openInBrowser: () =>
+    getTranslatedTextSync('contextMenu.openInBrowser', 'Open in Browser'),
+  openInFerdium: () =>
+    getTranslatedTextSync('contextMenu.openInFerdium', 'Open in Ferdium'),
+  copyLinkUrl: () =>
+    getTranslatedTextSync('contextMenu.copyLinkUrl', 'Copy Link'),
+  copyImageUrl: () =>
+    getTranslatedTextSync('contextMenu.copyImageAddress', 'Copy Image Address'),
+  copyImage: () => getTranslatedTextSync('contextMenu.copyImage', 'Copy Image'),
+  downloadImage: () =>
+    getTranslatedTextSync('contextMenu.downloadImage', 'Download Image'),
+  addToDictionary: () =>
+    getTranslatedTextSync('contextMenu.addToDictionary', 'Add to Dictionary'),
+  goBack: () => getTranslatedTextSync('contextMenu.goBack', 'Go Back'),
+  goForward: () => getTranslatedTextSync('contextMenu.goForward', 'Go Forward'),
+  copyPageUrl: () =>
+    getTranslatedTextSync('contextMenu.copyPageUrl', 'Copy Page URL'),
+  goToHomePage: () =>
+    getTranslatedTextSync('contextMenu.goToHome', 'Go to Home Page'),
+  copyMail: () =>
+    getTranslatedTextSync('contextMenu.copyMail', 'Copy Email Address'),
+  inspectElement: () =>
+    getTranslatedTextSync('contextMenu.inspectElement', 'Inspect Element'),
 };
 
 /**
@@ -328,10 +406,14 @@ export class ContextMenuBuilder {
       click: () => {
         // Omit the mailto: portion of the link; we just want the address
         const url = isEmailAddress ? menuInfo.linkText : menuInfo.linkURL;
-        clipboard.writeText(url);
+        writeTextToClipboard(url).catch(console.error);
         this._sendNotificationOnClipboardEvent(
           menuInfo.clipboardNotifications,
-          () => `Link URL copied: ${url}`,
+          () =>
+            getTranslatedTextSync(
+              'contextMenu.linkUrlCopied',
+              `Link URL copied: ${url}`,
+            ).replace('{url}', url),
         );
       },
     });
@@ -436,7 +518,10 @@ export class ContextMenuBuilder {
       menu.append(
         new MenuItem({
           type: 'checkbox',
-          label: 'Picture in picture',
+          label: getTranslatedTextSync(
+            'contextMenu.pictureInPicture',
+            'Picture in picture',
+          ),
           enabled: true,
           checked: !!document.pictureInPictureElement,
           click: async () => {
@@ -556,8 +641,10 @@ export class ContextMenuBuilder {
       translateToLanguage: string,
       translatorEngine: string,
     ) => {
-      // TODO: Need to support i18n
-      translatePopup('Loading...', false);
+      translatePopup(
+        getTranslatedTextSync('contextMenu.loading', 'Loading...'),
+        false,
+      );
 
       const translatedText = await ipcRenderer.invoke('translate', {
         text: menuInfo.selectionText,
@@ -649,13 +736,18 @@ export class ContextMenuBuilder {
       click: () => {
         const result = this.convertImageToBase64(
           menuInfo.srcURL,
-          (dataURL: string) =>
-            clipboard.writeImage(nativeImage.createFromDataURL(dataURL)),
+          (dataURL: string) => {
+            writeImageDataUrlToClipboard(dataURL).catch(console.error);
+          },
         );
 
         this._sendNotificationOnClipboardEvent(
           menuInfo.clipboardNotifications,
-          () => `Image copied from URL: ${menuInfo.srcURL}`,
+          () =>
+            getTranslatedTextSync(
+              'contextMenu.imageCopiedFromUrl',
+              `Image copied from URL: ${menuInfo.srcURL}`,
+            ).replace('{url}', menuInfo.srcURL),
         );
         return result;
       },
@@ -666,10 +758,14 @@ export class ContextMenuBuilder {
     const copyImageUrl = new MenuItem({
       label: this.stringTable.copyImageUrl(),
       click: () => {
-        const result = clipboard.writeText(menuInfo.srcURL);
+        const result = writeTextToClipboard(menuInfo.srcURL);
         this._sendNotificationOnClipboardEvent(
           menuInfo.clipboardNotifications,
-          () => `Image URL copied: ${menuInfo.srcURL}`,
+          () =>
+            getTranslatedTextSync(
+              'contextMenu.imageUrlCopied',
+              `Image URL copied: ${menuInfo.srcURL}`,
+            ).replace('{url}', menuInfo.srcURL),
         );
         return result;
       },
@@ -694,7 +790,11 @@ export class ContextMenuBuilder {
             });
             this._sendNotificationOnClipboardEvent(
               menuInfo.clipboardNotifications,
-              () => `Image downloaded: ${urlWithoutBlob}`,
+              () =>
+                getTranslatedTextSync(
+                  'contextMenu.imageDownloaded',
+                  `Image downloaded: ${urlWithoutBlob}`,
+                ).replace('{url}', urlWithoutBlob),
             );
           }
         : () => {
@@ -708,7 +808,11 @@ export class ContextMenuBuilder {
             });
             this._sendNotificationOnClipboardEvent(
               menuInfo.clipboardNotifications,
-              () => `Image downloaded: ${menuInfo.srcURL}`,
+              () =>
+                getTranslatedTextSync(
+                  'contextMenu.imageDownloaded',
+                  `Image downloaded: ${menuInfo.srcURL}`,
+                ).replace('{url}', menuInfo.srcURL),
             );
           };
       const downloadImage = new MenuItem({
@@ -900,10 +1004,14 @@ export class ContextMenuBuilder {
         label: this.stringTable.copyPageUrl(),
         enabled: true,
         click: () => {
-          clipboard.writeText(window.location.href);
+          writeTextToClipboard(window.location.href).catch(console.error);
           this._sendNotificationOnClipboardEvent(
             menuInfo?.clipboardNotifications,
-            () => `Page URL copied: ${window.location.href}`,
+            () =>
+              getTranslatedTextSync(
+                'contextMenu.pageUrlCopied',
+                `Page URL copied: ${window.location.href}`,
+              ).replace('{url}', window.location.href),
           );
         },
       }),
@@ -975,8 +1083,14 @@ export class ContextMenuBuilder {
       return;
     }
     // eslint-disable-next-line no-new
-    new window.Notification('Data copied into Clipboard', {
-      body: notificationText(),
-    });
+    new window.Notification(
+      getTranslatedTextSync(
+        'contextMenu.dataCopiedToClipboard',
+        'Data copied into Clipboard',
+      ),
+      {
+        body: notificationText(),
+      },
+    );
   }
 }

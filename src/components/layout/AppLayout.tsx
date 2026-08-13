@@ -19,7 +19,7 @@ import { updateVersionParse } from '../../helpers/update-helpers';
 import InfoBar from '../ui/InfoBar';
 import ErrorBoundary from '../util/ErrorBoundary';
 
-import { isMac, isSnap, isWindows } from '../../environment';
+import { isMac, isSnap, isWayland, isWindows } from '../../environment';
 import Todos from '../../features/todos/containers/TodosScreen';
 import { workspaceStore } from '../../features/workspaces';
 import WorkspaceSwitchingIndicator from '../../features/workspaces/components/WorkspaceSwitchingIndicator';
@@ -53,15 +53,27 @@ const transition = window?.matchMedia('(prefers-reduced-motion: no-preference)')
   ? 'transform 0.5s ease'
   : 'none';
 
-const styles = (theme: { workspaces: { drawer: { width: any } } }) => ({
+const styles = (theme: {
+  workspaces: {
+    drawer: {
+      width: any;
+      compactWidth: any;
+    };
+  };
+}) => ({
   appContent: {
-    // width: `calc(100% + ${theme.workspaces.drawer.width}px)`,
     width: '100%',
     transition,
     transform() {
+      const { settings } = workspaceStore.stores;
+
+      const drawerWidth = settings.all.app.useCompactWorkspaceDrawer
+        ? settings.all.app.serviceRibbonWidth
+        : theme.workspaces.drawer.width;
+
       return workspaceStore.isWorkspaceDrawerOpen
         ? 'translateX(0)'
-        : `translateX(-${theme.workspaces.drawer.width}px)`;
+        : `translateX(-${drawerWidth}px)`;
     },
   },
   titleBar: {
@@ -80,6 +92,7 @@ const toggleFullScreen = () => {
 
 interface IProps extends WrappedComponentProps, WithStylesProps<typeof styles> {
   settings: SettingsStore;
+  isUpdateAvailable: boolean;
   updateVersion: string;
   isFullScreen: boolean;
   sidebar: React.ReactElement;
@@ -128,11 +141,13 @@ class AppLayout extends Component<PropsWithChildren<IProps>, IState> {
       retryRequiredRequests,
       areRequiredRequestsLoading,
       updateVersion,
+      isUpdateAvailable,
     } = this.props;
 
     const { intl } = this.props;
 
-    const { locked, automaticUpdates } = settings.app;
+    const { locked, automaticUpdates, useCompactWorkspaceDrawer } =
+      settings.app;
     if (locked) {
       return <LockedScreen />;
     }
@@ -141,11 +156,14 @@ class AppLayout extends Component<PropsWithChildren<IProps>, IState> {
       <>
         {isMac && !isFullScreen && <div className="window-draggable" />}
         <ErrorBoundary>
-          <div className="app">
-            {isWindows && !isFullScreen && (
+          <div
+            className={`app ${useCompactWorkspaceDrawer ? 'app--compact-workspace' : ''}`}
+          >
+            {(isWindows || isWayland) && !isFullScreen && (
               <TitleBar
                 menu={window['ferdium'].menu.template}
-                icon="assets/images/logo.svg"
+                icon={isWindows ? 'assets/images/logo.svg' : undefined}
+                className={isWayland ? 'wayland-menu-bar' : undefined}
               />
             )}
             {isMac && !isFullScreen && (
@@ -204,7 +222,7 @@ class AppLayout extends Component<PropsWithChildren<IProps>, IState> {
                     </InfoBar>
                   )}
                 {automaticUpdates &&
-                  (appUpdateIsDownloaded || isSnap) &&
+                  (appUpdateIsDownloaded || (isSnap && isUpdateAvailable)) &&
                   this.state.shouldShowAppUpdateInfoBar && (
                     <AppUpdateInfoBar
                       onInstallUpdate={installAppUpdate}

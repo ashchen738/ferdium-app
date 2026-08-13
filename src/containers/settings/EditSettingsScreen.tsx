@@ -13,21 +13,14 @@ import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_SHORTCUTS,
   GOOGLE_TRANSLATOR_LANGUAGES,
-  HIBERNATION_STRATEGIES,
-  ICON_SIZES,
   LIBRETRANSLATE_TRANSLATOR_LANGUAGES,
-  NAVIGATION_BAR_BEHAVIOURS,
   SEARCH_ENGINE_NAMES,
-  SIDEBAR_SERVICES_LOCATION,
-  SIDEBAR_WIDTH,
   SPLIT_COLUMNS_MAX,
   SPLIT_COLUMNS_MIN,
   TODO_APPS,
   TRANSLATOR_ENGINE_GOOGLE,
   TRANSLATOR_ENGINE_NAMES,
-  WAKE_UP_HIBERNATION_STRATEGIES,
-  WAKE_UP_STRATEGIES,
-  WEBRTC_IP_HANDLING_POLICY,
+  getI18nConfigObjects,
 } from '../../config';
 import { isMac } from '../../environment';
 import { APP_LOCALES, SPELLCHECKER_LOCALES } from '../../i18n/languages';
@@ -279,6 +272,10 @@ const messages = defineMessages({
     id: 'settings.app.form.alwaysShowWorkspaces',
     defaultMessage: 'Always show workspace drawer',
   },
+  useCompactWorkspaceDrawer: {
+    id: 'settings.app.form.useCompactWorkspaceDrawer',
+    defaultMessage: 'Use compact workspace drawer',
+  },
   hideAllServicesWorkspace: {
     id: 'settings.app.form.hideAllServicesWorkspace',
     defaultMessage: 'Hide "All services" workspace',
@@ -486,6 +483,9 @@ class EditSettingsScreen extends Component<
       hideSettingsButton: Boolean(settingsData.hideSettingsButton),
       hideDownloadButton: Boolean(settingsData.hideDownloadButton),
       alwaysShowWorkspaces: Boolean(settingsData.alwaysShowWorkspaces),
+      useCompactWorkspaceDrawer: Boolean(
+        settingsData.useCompactWorkspaceDrawer,
+      ),
       hideAllServicesWorkspace: Boolean(settingsData.hideAllServicesWorkspace),
       accentColor: settingsData.accentColor,
       progressbarAccentColor: settingsData.progressbarAccentColor,
@@ -593,17 +593,22 @@ class EditSettingsScreen extends Component<
     const { intl } = this.props;
     const { lockedPassword } = this.state;
 
+    // Obtain the internationalization configuration object - this is the critical step
+    const i18nConfig = getI18nConfigObjects(intl);
+
     const locales = getSelectOptions({
       locales: APP_LOCALES,
     });
 
+    // Use the internationalized navigation bar behavior configuration
     const navigationBarBehaviours = getSelectOptions({
-      locales: NAVIGATION_BAR_BEHAVIOURS,
+      locales: i18nConfig.NAVIGATION_BAR_BEHAVIOURS,
       sort: false,
     });
 
+    // Use the internationalized WebRTC IP handling policy configuration
     const webRTCIPHandlingPolicies = getSelectOptions({
-      locales: WEBRTC_IP_HANDLING_POLICY,
+      locales: i18nConfig.WEBRTC_IP_HANDLING_POLICY,
       sort: false,
     });
 
@@ -622,18 +627,21 @@ class EditSettingsScreen extends Component<
       sort: false,
     });
 
+    // Use the internationalized hibernation strategy configuration
     const hibernationStrategies = getSelectOptions({
-      locales: HIBERNATION_STRATEGIES,
+      locales: i18nConfig.HIBERNATION_STRATEGIES,
       sort: false,
     });
 
+    // Use the internationalized wake-up strategy configuration
     const wakeUpStrategies = getSelectOptions({
-      locales: WAKE_UP_STRATEGIES,
+      locales: i18nConfig.WAKE_UP_STRATEGIES,
       sort: false,
     });
 
+    // Use the internationalized wake-up hibernation strategy configuration
     const wakeUpHibernationStrategies = getSelectOptions({
-      locales: WAKE_UP_HIBERNATION_STRATEGIES,
+      locales: i18nConfig.WAKE_UP_HIBERNATION_STRATEGIES,
       sort: false,
     });
 
@@ -642,18 +650,21 @@ class EditSettingsScreen extends Component<
       sort: false,
     });
 
+    // Use the internationalized sidebar width configuration
     const sidebarWidth = getSelectOptions({
-      locales: SIDEBAR_WIDTH,
+      locales: i18nConfig.SIDEBAR_WIDTH,
       sort: false,
     });
 
+    // Use the internationalized sidebar service location configuration
     const sidebarServicesLocation = getSelectOptions({
-      locales: SIDEBAR_SERVICES_LOCATION,
+      locales: i18nConfig.SIDEBAR_SERVICES_LOCATION,
       sort: false,
     });
 
+    // Use the internationalized icon size configuration
     const iconSizes = getSelectOptions({
-      locales: ICON_SIZES,
+      locales: i18nConfig.ICON_SIZES,
       sort: false,
     });
 
@@ -1249,6 +1260,15 @@ class EditSettingsScreen extends Component<
           default: DEFAULT_APP_SETTINGS.alwaysShowWorkspaces,
           type: 'checkbox',
         },
+        useCompactWorkspaceDrawer: {
+          label: intl.formatMessage(messages.useCompactWorkspaceDrawer),
+          value: ifUndefined<boolean>(
+            settings.all.app.useCompactWorkspaceDrawer,
+            DEFAULT_APP_SETTINGS.useCompactWorkspaceDrawer,
+          ),
+          default: DEFAULT_APP_SETTINGS.useCompactWorkspaceDrawer,
+          type: 'checkbox',
+        },
         hideAllServicesWorkspace: {
           label: intl.formatMessage(messages.hideAllServicesWorkspace),
           value: ifUndefined<boolean>(
@@ -1441,6 +1461,7 @@ class EditSettingsScreen extends Component<
           openProcessManager={() => this.openProcessManager()}
           isOnline={app.isOnline}
           serverURL={importExportURL()}
+          lastUpdateCheckTime={app.lastUpdateCheckTime}
         />
       </ErrorBoundary>
     );

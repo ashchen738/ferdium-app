@@ -1,18 +1,30 @@
 import { inject, observer } from 'mobx-react';
 import { Component, type ReactElement } from 'react';
+import {
+  type WrappedComponentProps,
+  defineMessages,
+  injectIntl,
+} from 'react-intl';
 import { ThemeProvider } from 'react-jss';
 import { Outlet } from 'react-router-dom';
 import type { StoresProps } from '../../@types/ferdium-components.types';
 import AuthLayout from '../../components/auth/AuthLayout';
 import AppLoader from '../../components/ui/AppLoader';
 
-interface IProps extends StoresProps {}
+const messages = defineMessages({
+  loggingOut: {
+    id: 'auth.loggingOut',
+    defaultMessage: 'Logging you out...',
+  },
+});
+
+interface IProps extends StoresProps, WrappedComponentProps {}
 
 @inject('stores', 'actions')
 @observer
 class AuthLayoutContainer extends Component<IProps> {
   render(): ReactElement {
-    const { stores, actions } = this.props;
+    const { stores, actions, intl } = this.props;
     const { app, features, globalError, user } = stores;
 
     const isLoadingBaseFeatures =
@@ -31,7 +43,10 @@ class AuthLayoutContainer extends Component<IProps> {
     if (isLoggingOut) {
       return (
         <ThemeProvider theme={stores.ui.theme}>
-          <AppLoader theme={stores.ui.theme} texts={['Logging you out...']} />
+          <AppLoader
+            theme={stores.ui.theme}
+            texts={[intl.formatMessage(messages.loggingOut)]}
+          />
         </ThemeProvider>
       );
     }
@@ -50,6 +65,9 @@ class AuthLayoutContainer extends Component<IProps> {
             app.updateStatus === app.updateStatusTypes.DOWNLOADED
           }
           updateVersion={app.updateVersion}
+          isUpdateAvailable={
+            app.updateStatus === app.updateStatusTypes.AVAILABLE
+          }
         >
           <Outlet />
         </AuthLayout>
@@ -58,4 +76,4 @@ class AuthLayoutContainer extends Component<IProps> {
   }
 }
 
-export default AuthLayoutContainer;
+export default injectIntl(AuthLayoutContainer);

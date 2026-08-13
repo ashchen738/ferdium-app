@@ -31,7 +31,7 @@ import {
   userDataPath,
 } from '../environment-remote';
 import sleep from '../helpers/async-helpers';
-import { getLocale } from '../helpers/i18n-helpers';
+import { getLocale, getTranslatedText } from '../helpers/i18n-helpers';
 import {
   getServiceIdsFromPartitions,
   removeServicePartitionDirectory,
@@ -133,6 +133,8 @@ export default class AppStore extends TypedStore {
     DEFAULT_APP_SETTINGS.isLockingFeatureEnabled;
 
   @observable launchInBackground = DEFAULT_APP_SETTINGS.autoLaunchInBackground;
+
+  @observable lastUpdateCheckTime: string | null = null;
 
   fetchDataInterval: NodeJS.Timeout | null = null;
 
@@ -346,14 +348,33 @@ export default class AppStore extends TypedStore {
     if (isMac && !localStorage.getItem(CATALINA_NOTIFICATION_HACK_KEY)) {
       debug('Triggering macOS Catalina notification permission trigger');
       // eslint-disable-next-line no-new
-      new window.Notification('Welcome to Ferdium 7', {
-        body: 'Have a wonderful day & happy messaging.',
-      });
+      new window.Notification(
+        getTranslatedText(
+          this.locale,
+          'app.welcomeNotification.title',
+          // `Welcome to Ferdium ${ferdiumVersion}`,
+          // { version: ferdiumVersion },
+          `Welcome to Ferdium ${ferdiumVersion.split('.')[0]}`,
+          { version: ferdiumVersion.split('.')[0] },
+        ),
+        {
+          body: getTranslatedText(
+            this.locale,
+            'app.welcomeNotification.body',
+            'Have a wonderful day & happy messaging.',
+          ),
+        },
+      );
 
       localStorage.setItem(CATALINA_NOTIFICATION_HACK_KEY, 'true');
     }
 
     this._initializeSandboxes();
+
+    const storedTime = this.stores.settings.all.app?.lastUpdateCheckTime;
+    if (storedTime) {
+      this.lastUpdateCheckTime = storedTime;
+    }
   }
 
   _initializeSandboxes() {
@@ -396,9 +417,8 @@ export default class AppStore extends TypedStore {
   }
 
   _readSandboxes() {
-    this.sandboxServices = readJsonSync(
-      userDataPath('config', 'sandboxes.json'),
-    );
+    const data = readJsonSync(userDataPath('config', 'sandboxes.json'));
+    this.sandboxServices = Array.isArray(data) ? data : [];
   }
 
   _writeSandboxes() {
@@ -552,14 +572,21 @@ export default class AppStore extends TypedStore {
     openExternalUrl(new URL(url));
   }
 
-  @action _checkForUpdates() {
+  @action _checkForUpdates () {
     if (this.isOnline && this.stores.settings.app.automaticUpdates) {
-      debug('_checkForUpdates: sending event to autoUpdate:check');
+      debug('_checkForUpdates: ending event to autoUpdate:check');
       this.updateStatus = this.updateStatusTypes.CHECKING;
-      ipcRenderer.send('autoUpdate', {
-        action: 'check',
-      });
+      ipcRenderer.send('autoUpdate', { action: 'check' });
     }
+
+    const now = moment().format();
+    this.lastUpdateCheckTime = now;
+    this.actions.settings.update({
+      type: 'app',
+      data: {
+        lastUpdateCheckTime: now,
+      },
+    });
 
     if (this.isOnline && this.stores.settings.app.automaticUpdates) {
       this.actions.recipe.update();
@@ -718,7 +745,9 @@ export default class AppStore extends TypedStore {
     });
   }
 
-  @action _addSandboxService({ name = 'NEW SANDBOX' }) {
+  @action _addSandboxService({
+    name = getTranslatedText(this.locale, 'app.newSandbox', 'NEW SANDBOX'),
+  }) {
     // Random ID
     const id = uuidV4();
 
@@ -744,7 +773,7 @@ export default class AppStore extends TypedStore {
     this._writeSandboxes();
   }
 
-  _setLocale() {
+  _setLocale () {
     if (this.stores.user?.isLoggedIn && this.stores.user?.data.locale) {
       this._changeLocale(this.stores.user.data.locale);
     } else if (!this.locale) {
@@ -752,11 +781,11 @@ export default class AppStore extends TypedStore {
     }
 
     moment.locale(this.locale);
-    debug(`Set locale to "${this.locale}"`);
+    debug(`Set locale to "${ this.locale }"`);
   }
 
   // Reactions
-  _offlineCheck() {
+  _offlineCheck () {
     if (this.isOnline) {
       const deltaTime = moment().diff(this.timeOfflineStart);
 
@@ -768,7 +797,7 @@ export default class AppStore extends TypedStore {
     }
   }
 
-  _getDefaultLocale() {
+  _getDefaultLocale () {
     return getLocale({
       locale: ferdiumLocale,
       locales,
@@ -776,7 +805,7 @@ export default class AppStore extends TypedStore {
     });
   }
 
-  _muteAppHandler() {
+  _muteAppHandler () {
     const { showMessageBadgesEvenWhenMuted } = this.stores.ui;
 
     if (!showMessageBadgesEvenWhenMuted) {
@@ -787,7 +816,7 @@ export default class AppStore extends TypedStore {
     }
   }
 
-  _handleFullScreen() {
+  _handleFullScreen () {
     const body = document.querySelector('body');
 
     if (body) {
@@ -799,14 +828,14 @@ export default class AppStore extends TypedStore {
     }
   }
 
-  _handleLogout() {
+  _handleLogout () {
     if (!this.stores.user.isLoggedIn && this.fetchDataInterval !== null) {
       clearInterval(this.fetchDataInterval);
     }
   }
 
   // Helpers
-  _appStartsCounter() {
+  _appStartsCounter () {
     this.actions.settings.update({
       type: 'stats',
       data: {
@@ -815,7 +844,7 @@ export default class AppStore extends TypedStore {
     });
   }
 
-  async _autoStart() {
+  async _autoStart () {
     this.autoLaunchOnStart = await this._checkAutoStart();
 
     if (this.stores.settings.all.stats.appStarts === 1) {
@@ -826,11 +855,11 @@ export default class AppStore extends TypedStore {
     }
   }
 
-  async _checkAutoStart() {
+  async _checkAutoStart () {
     return autoLauncher.isEnabled() || false;
   }
 
-  async _systemDND() {
+  async _systemDND () {
     debug('Checking if Do Not Disturb Mode is on');
     const dnd = await ipcRenderer.invoke('get-dnd');
     debug('Do not disturb mode is', dnd);

@@ -11,7 +11,7 @@ import {
 import { type WrappedComponentProps, injectIntl } from 'react-intl';
 import { serverName } from '../../api/apiBase';
 import { GITHUB_FERDIUM_URL } from '../../config';
-import { isSnap, isWindows } from '../../environment';
+import { isSnap, isWayland, isWindows } from '../../environment';
 import { Component as PublishDebugInfo } from '../../features/publishDebugInfo';
 import { updateVersionParse } from '../../helpers/update-helpers';
 import globalMessages from '../../i18n/globalMessages';
@@ -31,6 +31,7 @@ export interface IProps extends WrappedComponentProps {
   installAppUpdate: MouseEventHandler<HTMLButtonElement>;
   appUpdateIsDownloaded: boolean;
   updateVersion: string;
+  isUpdateAvailable: boolean;
 }
 
 interface IState {
@@ -60,6 +61,7 @@ class AuthLayout extends Component<IProps, IState> {
       appUpdateIsDownloaded,
       updateVersion,
       intl,
+      isUpdateAvailable,
     } = this.props;
 
     let serverNameParse = serverName();
@@ -68,10 +70,11 @@ class AuthLayout extends Component<IProps, IState> {
 
     return (
       <>
-        {isWindows && !isFullScreen && (
+        {(isWindows || isWayland) && !isFullScreen && (
           <TitleBar
             menu={window['ferdium'].menu.template}
-            icon="assets/images/logo.svg"
+            icon={isWindows ? 'assets/images/logo.svg' : undefined}
+            className={isWayland ? 'wayland-menu-bar' : undefined}
           />
         )}
         <div className="auth">
@@ -81,7 +84,7 @@ class AuthLayout extends Component<IProps, IState> {
               {intl.formatMessage(globalMessages.notConnectedToTheInternet)}
             </InfoBar>
           )}
-          {(appUpdateIsDownloaded || isSnap) &&
+          {(appUpdateIsDownloaded || (isSnap && isUpdateAvailable)) &&
             this.state.shouldShowAppUpdateInfoBar && (
               <AppUpdateInfoBar
                 onInstallUpdate={installAppUpdate}
